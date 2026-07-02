@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nils & Vidar – Arbetstider 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #F7F6F3;
+      --surface:   #FFFFFF;
+      --border:    #E4E2DC;
+      --text:      #1A1916;
+      --muted:     #8A8880;
+      --nils:      #3B6FD4;
+      --nils-bg:   #EBF1FC;
+      --vidar:     #C4510E;
+      --vidar-bg:  #FDEEE5;
+      --note-bg:   #FFFBEA;
+      --note:      #92720A;
+      --today-ring:#3B6FD4;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 20px 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-inner {
+      max-width: 640px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      flex: 1;
+    }
+    .header-title span { color: var(--muted); font-weight: 400; }
+    .legend {
+      display: flex;
+      gap: 12px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; }
+    .dot-nils  { background: var(--nils); }
+    .dot-vidar { background: var(--vidar); }
+
+    /* ── Status bar ── */
+    #status-bar {
+      max-width: 640px;
+      margin: 12px auto 0;
+      padding: 0 20px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 18px;
+    }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--nils);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Month nav ── */
+    .month-nav {
+      max-width: 640px;
+      margin: 14px auto 0;
+      padding: 0 20px;
+      display: flex;
+      gap: 8px;
+    }
+    .month-btn {
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .month-btn:hover  { border-color: var(--text); color: var(--text); }
+    .month-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+
+    /* ── Main ── */
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 18px 20px 60px;
+    }
+    .month-section { display: none; }
+    .month-section.visible { display: block; }
+    .month-heading {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .day-list { display: flex; flex-direction: column; gap: 5px; }
+
+    /* ── Day card ── */
+    .day-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 14px;
+      display: grid;
+      grid-template-columns: 66px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .day-card.empty {
+      background: transparent;
+      border-color: transparent;
+      opacity: .4;
+    }
+    .day-card.today {
+      border-color: var(--today-ring);
+      box-shadow: 0 0 0 1px var(--today-ring);
+    }
+
+    .date-col { display: flex; flex-direction: column; }
+    .date-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 21px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .date-day { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .shifts-col { display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
+
+    .shift-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      width: fit-content;
+    }
+    .shift-chip.nils  { background: var(--nils-bg);  color: var(--nils); }
+    .shift-chip.vidar { background: var(--vidar-bg); color: var(--vidar); }
+    .shift-label { font-size: 10px; font-weight: 600; letter-spacing: .06em; opacity: .65; }
+
+    .note-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--note-bg);
+      color: var(--note);
+      width: fit-content;
+    }
+
+    .off-label { font-size: 13px; color: var(--muted); padding-top: 1px; }
+
+    /* ── Error state ── */
+    .error-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .error-msg strong { display: block; color: var(--text); margin-bottom: 6px; }
+
+    /* ── Refresh button ── */
+    #refresh-btn {
+      background: none;
+      border: none;
+      color: var(--nils);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-title">Nils & Vidar <span>arbetstider 2026</span></div>
+    <div class="legend">
+      <div class="legend-item"><div class="dot dot-nils"></div> Nils</div>
+      <div class="legend-item"><div class="dot dot-vidar"></div> Vidar</div>
+    </div>
+  </div>
+</header>
+
+<div id="status-bar">
+  <div class="spinner" id="spinner"></div>
+  <span id="status-text">Hämtar schema…</span>
+</div>
+
+<div class="month-nav">
+  <button class="month-btn" data-month="7">Juli</button>
+  <button class="month-btn" data-month="8">Augusti</button>
+  <button class="month-btn" data-month="9">September</button>
+</div>
+
+<main>
+  <div class="month-section" id="month-7">
+    <p class="month-heading">Juli 2026</p>
+    <div class="day-list" id="list-7"></div>
+  </div>
+  <div class="month-section" id="month-8">
+    <p class="month-heading">Augusti 2026</p>
+    <div class="day-list" id="list-8"></div>
+  </div>
+  <div class="month-section" id="month-9">
+    <p class="month-heading">September 2026</p>
+    <div class="day-list" id="list-9"></div>
+  </div>
+</main>
+
+<script>
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTmVn336HAXYDHUCJE-_fBO1ZjJeqmdjuZ2Gz0OXmzOoP93B7lNYj9xKQIB0PjHnxSE2HewugTmH5cW/pub?gid=0&single=true&output=csv";
+
+// ── Swedish month name → number
+const MONTH_MAP = {
+  "januari":1,"februari":2,"mars":3,"april":4,"maj":5,"juni":6,
+  "juli":7,"augusti":8,"september":9,"oktober":10,"november":11,"december":12
+};
+
+function parseDate(datumStr) {
+  // e.g. "3 juli" or "1 September"
+  const parts = datumStr.trim().toLowerCase().split(" ");
+  if (parts.length < 2) return null;
+  const day   = parseInt(parts[0]);
+  const month = MONTH_MAP[parts[1]];
+  if (!day || !month) return null;
+  return { month, day, iso: `2026-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}` };
+}
+
+function parseCSV(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const schedule = [];
+
+  // Find header row (contains "Datum")
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes("datum")) { headerIdx = i; break; }
+  }
+  if (headerIdx === -1) return schedule;
+
+  // Parse header to find column indices
+  const headers = splitCSVRow(lines[headerIdx]).map(h => h.trim().toLowerCase());
+  const iDatum  = headers.findIndex(h => h === "datum");
+  const iDag    = headers.findIndex(h => h === "dag");
+  const iNils   = headers.findIndex(h => h === "nils");
+  const iVidar  = headers.findIndex(h => h === "vidar");
+  const iNote   = headers.findIndex(h => h === "skjutsa");
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cols = splitCSVRow(lines[i]);
+    const datumRaw = cols[iDatum] || "";
+    if (!datumRaw.trim()) continue;
+    const parsed = parseDate(datumRaw);
+    if (!parsed) continue;
+
+    schedule.push({
+      date:  parsed.iso,
+      month: parsed.month,
+      day:   parsed.day,
+      dag:   (cols[iDag]  || "").trim(),
+      nils:  (cols[iNils] || "").trim().replace(/-/g, "–"),
+      vidar: (cols[iVidar]|| "").trim().replace(/-/g, "–"),
+      note:  iNote >= 0 ? (cols[iNote] || "").trim() : "",
+    });
+  }
+  return schedule;
+}
+
+function splitCSVRow(row) {
+  // Simple CSV split respecting quoted fields
+  const result = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < row.length; i++) {
+    const c = row[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
+    else { cur += c; }
+  }
+  result.push(cur);
+  return result;
+}
+
+function buildLists(schedule) {
+  [7, 8, 9].forEach(m => {
+    const days = schedule.filter(d => d.month === m);
+    const listEl = document.getElementById(`list-${m}`);
+    listEl.innerHTML = "";
+
+    days.forEach(d => {
+      const hasNils  = d.nils  !== "";
+      const hasVidar = d.vidar !== "";
+      const hasNote  = d.note  !== "";
+      const isEmpty  = !hasNils && !hasVidar;
+      const isToday  = d.date === todayStr;
+
+      const card = document.createElement("div");
+      card.className = "day-card" + (isEmpty ? " empty" : "") + (isToday ? " today" : "");
+
+      const dateCol = document.createElement("div");
+      dateCol.className = "date-col";
+      dateCol.innerHTML = `<span class="date-num">${d.day}</span><span class="date-day">${d.dag}</span>`;
+
+      const shiftsCol = document.createElement("div");
+      shiftsCol.className = "shifts-col";
+
+      if (hasNils)  shiftsCol.innerHTML += `<div class="shift-chip nils"><span class="shift-label">NILS</span>${d.nils}</div>`;
+      if (hasVidar) shiftsCol.innerHTML += `<div class="shift-chip vidar"><span class="shift-label">VIDAR</span>${d.vidar}</div>`;
+      if (!hasNils && !hasVidar) shiftsCol.innerHTML += `<span class="off-label">Ledigt</span>`;
+      if (hasNote)  shiftsCol.innerHTML += `<div class="note-chip">📌 ${d.note}</div>`;
+
+      card.appendChild(dateCol);
+      card.appendChild(shiftsCol);
+      listEl.appendChild(card);
+    });
+  });
+}
+
+// ── Month switching
+const todayStr = new Date().toISOString().slice(0, 10);
+
+function showMonth(m) {
+  document.querySelectorAll(".month-btn").forEach(b =>
+    b.classList.toggle("active", parseInt(b.dataset.month) === m));
+  document.querySelectorAll(".month-section").forEach(s =>
+    s.classList.toggle("visible", s.id === `month-${m}`));
+}
+
+document.querySelectorAll(".month-btn").forEach(btn =>
+  btn.addEventListener("click", () => showMonth(parseInt(btn.dataset.month))));
+
+// ── Fetch and render
+async function loadSchedule() {
+  const spinner    = document.getElementById("spinner");
+  const statusText = document.getElementById("status-text");
+
+  spinner.style.display = "block";
+  statusText.textContent = "Hämtar schema…";
+
+  try {
+    // Cache-bust so we always get fresh data
+    const res = await fetch(CSV_URL + "&cachebust=" + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const schedule = parseCSV(text);
+
+    if (schedule.length === 0) throw new Error("Kunde inte läsa datan");
+
+    buildLists(schedule);
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+    spinner.style.display = "none";
+    statusText.innerHTML = `Uppdaterat ${timeStr} &nbsp;·&nbsp; <button id="refresh-btn" onclick="loadSchedule()">Uppdatera</button>`;
+
+    // Show correct month, scroll today into view
+    const todayMonth = now.getMonth() + 1;
+    showMonth([7,8,9].includes(todayMonth) ? todayMonth : 7);
+    setTimeout(() => {
+      const todayCard = document.querySelector(".day-card.today");
+      if (todayCard) todayCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+
+  } catch (err) {
+    spinner.style.display = "none";
+    statusText.innerHTML = `⚠️ Kunde inte hämta data · <button id="refresh-btn" onclick="loadSchedule()">Försök igen</button>`;
+    console.error(err);
+  }
+}
+
+loadSchedule();
+</script>
+</body>
+</html>
