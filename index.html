@@ -6,6 +6,15 @@
   <title>Nils & Vidar – Arbetstider 2026</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+  <!-- PWA: gör appen installningsbar på hemskärmen -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1A1916" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Arbetstider" />
+
   <script type="module">
     import { initializeApp }        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, signInWithPopup, signOut, onAuthStateChanged, GoogleAuthProvider }
@@ -33,6 +42,12 @@
       "januari":1,"februari":2,"mars":3,"april":4,"maj":5,"juni":6,
       "juli":7,"augusti":8,"september":9,"oktober":10,"november":11,"december":12
     };
+    const MONTH_NAMES = {
+      1:"Januari",2:"Februari",3:"Mars",4:"April",5:"Maj",6:"Juni",
+      7:"Juli",8:"Augusti",9:"September",10:"Oktober",11:"November",12:"December"
+    };
+
+    let pollStarted = false;
 
     const app      = initializeApp(firebaseConfig);
     const auth     = getAuth(app);
@@ -127,9 +142,35 @@
       return schedule;
     }
 
-    function buildLists(schedule) {
+    function getAvailableMonths(schedule) {
+      return [...new Set(schedule.map(d => d.month))].sort((a,b) => a - b);
+    }
+
+    // Bygger om månad-knapparna och månad-sektionerna i DOM:en utifrån
+    // vilka månader som faktiskt finns i Sheet-datan just nu. Så snart fler
+    // månader fylls på i kalkylarket dyker de upp här automatiskt.
+    function renderMonthShell(months) {
+      const nav  = document.getElementById("month-nav");
+      const main = document.getElementById("months-container");
+      const activeBefore = document.querySelector(".month-btn.active")?.dataset.month;
+
+      nav.innerHTML = months.map(m =>
+        `<button class="month-btn" data-month="${m}">${MONTH_NAMES[m]}</button>`
+      ).join("");
+
+      main.innerHTML = months.map(m => `
+        <div class="month-section" id="month-${m}">
+          <p class="month-heading">${MONTH_NAMES[m]} 2026</p>
+          <div class="day-list" id="list-${m}"></div>
+        </div>
+      `).join("");
+
+      return activeBefore ? parseInt(activeBefore) : null;
+    }
+
+    function buildLists(schedule, months) {
       const todayStr = new Date().toISOString().slice(0,10);
-      [7,8,9].forEach(m => {
+      months.forEach(m => {
         const days   = schedule.filter(d => d.month === m);
         const listEl = document.getElementById("list-" + m);
         listEl.innerHTML = "";
@@ -167,18 +208,34 @@
         const text = await res.text();
         const schedule = parseCSV(text);
         if (schedule.length === 0) throw new Error("Tom data");
-        buildLists(schedule);
+
+        checkForScheduleChange(schedule);
+
+        const months = getAvailableMonths(schedule);
+        const wasActive = renderMonthShell(months);
+        buildLists(schedule, months);
+
         const now = new Date();
         const timeStr = now.toLocaleTimeString("sv-SE", { hour:"2-digit", minute:"2-digit" });
         spinner.style.display = "none";
         statusText.innerHTML = "Uppdaterat " + timeStr + " &nbsp;&middot;&nbsp; <button class='refresh-link' id='reload-btn'>Uppdatera</button>";
         document.getElementById("reload-btn").addEventListener("click", loadSchedule);
+
         const todayMonth = now.getMonth() + 1;
-        showMonth([7,8,9].includes(todayMonth) ? todayMonth : 7);
+        const target = months.includes(wasActive) ? wasActive
+                     : months.includes(todayMonth) ? todayMonth
+                     : months[0];
+        if (target) showMonth(target);
+
         setTimeout(() => {
           const todayCard = document.querySelector(".day-card.today");
           if (todayCard) todayCard.scrollIntoView({ behavior:"smooth", block:"center" });
         }, 150);
+
+        if (!pollStarted) {
+          pollStarted = true;
+          setInterval(loadSchedule, 5 * 60 * 1000); // kolla efter ändringar var 5:e minut
+        }
       } catch(err) {
         spinner.style.display = "none";
         statusText.innerHTML = "Kunde inte haemta data &nbsp;&middot;&nbsp; <button class='refresh-link' id='reload-btn'>Foersoek igen</button>";
@@ -194,8 +251,100 @@
         s.classList.toggle("visible", s.id === "month-" + m));
     }
 
-    document.querySelectorAll(".month-btn").forEach(btn =>
-      btn.addEventListener("click", () => showMonth(parseInt(btn.dataset.month))));
+    // Månad-knapparna byggs om varje gång datan uppdateras, så vi lyssnar
+    // via delegation på den omslutande behållaren istället för på knapparna direkt.
+    document.getElementById("month-nav").addEventListener("click", (e) => {
+      const btn = e.target.closest(".month-btn");
+      if (btn) showMonth(parseInt(btn.dataset.month));
+    });
+
+    // ---- Notiser vid schemaändring ----------------------------------------
+    // Vi sparar en "signatur" av hela schemat i localStorage. Om signaturen
+    // skiljer sig från förra gången (och notiser är påslagna) visar vi en
+    // notis om att schemat har ändrats. Detta täcker fallet att appen är
+    // öppen (eller pollas var 5:e minut enligt ovan). Se sw.js för ett
+    // best-effort-försök att även upptäcka ändringar när appen är stängd
+    // (fungerar bara på plattformar som stödjer Periodic Background Sync).
+    function scheduleSignature(schedule) {
+      return schedule.map(d => `${d.date}|${d.nils}|${d.vidar}|${d.note}`).join(";");
+    }
+
+    async function notifyScheduleChanged() {
+      const title = "Schemat har uppdaterats";
+      const options = { body: "Nya tider finns för Nils & Vidar.", icon: "icons/icon-192.png", badge: "icons/icon-192.png" };
+      try {
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) { reg.showNotification(title, options); return; }
+        }
+        new Notification(title, options);
+      } catch (e) { console.error("Kunde inte visa notis", e); }
+    }
+
+    function checkForScheduleChange(schedule) {
+      const sig     = scheduleSignature(schedule);
+      const prevSig = localStorage.getItem("schedule-sig");
+      const enabled = localStorage.getItem("notify-enabled") === "1";
+      if (prevSig && prevSig !== sig && enabled && window.Notification && Notification.permission === "granted") {
+        notifyScheduleChanged();
+      }
+      localStorage.setItem("schedule-sig", sig);
+    }
+
+    function updateNotifyButton() {
+      const btn = document.getElementById("btn-notify");
+      if (!btn) return;
+      const supported = "Notification" in window;
+      const enabled   = supported && localStorage.getItem("notify-enabled") === "1" && Notification.permission === "granted";
+      btn.textContent = enabled ? "🔔" : "🔕";
+      btn.title = !supported ? "Notiser stöds inte i den här webbläsaren"
+                : Notification.permission === "denied" ? "Notiser blockerade i webbläsaren"
+                : enabled ? "Notiser på – klicka för att stänga av"
+                : "Slå på notiser vid schemaändring";
+    }
+
+    async function toggleNotifications() {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "denied") {
+        alert("Notiser är blockerade för den här sidan i din webbläsare. Ändra behörigheten i webbläsarinställningarna om du vill slå på dem.");
+        return;
+      }
+      const currentlyEnabled = localStorage.getItem("notify-enabled") === "1";
+      if (currentlyEnabled) {
+        localStorage.setItem("notify-enabled", "0");
+        updateNotifyButton();
+        return;
+      }
+      let perm = Notification.permission;
+      if (perm === "default") perm = await Notification.requestPermission();
+      if (perm === "granted") {
+        localStorage.setItem("notify-enabled", "1");
+        registerPeriodicSync();
+      }
+      updateNotifyButton();
+    }
+
+    async function registerPeriodicSync() {
+      if (!("serviceWorker" in navigator)) return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if ("periodicSync" in reg) {
+          const status = await navigator.permissions.query({ name: "periodic-background-sync" });
+          if (status.state === "granted") {
+            await reg.periodicSync.register("check-schedule", { minInterval: 60 * 60 * 1000 });
+          }
+        }
+      } catch (e) { /* Periodic Background Sync stöds inte här — foreground-pollingen tar över. */ }
+    }
+
+    document.getElementById("btn-notify")?.addEventListener("click", toggleNotifications);
+    updateNotifyButton();
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js")
+        .then(() => { if (localStorage.getItem("notify-enabled") === "1") registerPeriodicSync(); })
+        .catch(e => console.error("Service worker-registrering misslyckades", e));
+    }
 
   </script>
 
@@ -281,6 +430,12 @@
       color: var(--muted); font-size: 11px; font-family: inherit; cursor: pointer;
     }
     #btn-signout:hover { color: var(--text); }
+    .btn-notify {
+      background: none; border: none; font-size: 14px;
+      cursor: pointer; line-height: 1; padding: 0 2px;
+      filter: grayscale(1); opacity: .6; transition: all .15s;
+    }
+    .btn-notify:hover { opacity: 1; }
 
     #status-bar {
       max-width: 640px; margin: 10px auto 0; padding: 0 20px;
@@ -388,6 +543,7 @@
           <div class="legend-item"><div class="dot dot-vidar"></div> Vidar</div>
         </div>
         <div class="user-pill">
+          <button id="btn-notify" class="btn-notify" title="Slå på notiser vid schemaändring">🔕</button>
           <div class="user-avatar" id="user-avatar"></div>
           <span id="user-email"></span>
           <button id="btn-signout" title="Logga ut">&#10005;</button>
@@ -400,25 +556,10 @@
       <span id="status-text">H&auml;mtar schema&hellip;</span>
     </div>
 
-    <div class="month-nav">
-      <button class="month-btn" data-month="7">Juli</button>
-      <button class="month-btn" data-month="8">Augusti</button>
-      <button class="month-btn" data-month="9">September</button>
-    </div>
+    <div class="month-nav" id="month-nav"></div>
 
     <main>
-      <div class="month-section" id="month-7">
-        <p class="month-heading">Juli 2026</p>
-        <div class="day-list" id="list-7"></div>
-      </div>
-      <div class="month-section" id="month-8">
-        <p class="month-heading">Augusti 2026</p>
-        <div class="day-list" id="list-8"></div>
-      </div>
-      <div class="month-section" id="month-9">
-        <p class="month-heading">September 2026</p>
-        <div class="day-list" id="list-9"></div>
-      </div>
+      <div id="months-container"></div>
     </main>
   </div>
 
