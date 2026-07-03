@@ -189,7 +189,7 @@
           if (hasNils)  shiftsCol.innerHTML += '<div class="shift-chip nils"><span class="shift-label">NILS</span>' + d.nils + '</div>';
           if (hasVidar) shiftsCol.innerHTML += '<div class="shift-chip vidar"><span class="shift-label">VIDAR</span>' + d.vidar + '</div>';
           if (!hasNils && !hasVidar) shiftsCol.innerHTML += '<span class="off-label">Ledigt</span>';
-          if (d.note)   shiftsCol.innerHTML += '<div class="note-chip">pin ' + d.note + '</div>';
+          if (d.note)   shiftsCol.innerHTML += '<div class="note-chip">&#128204; ' + d.note + '</div>';
           card.appendChild(dateCol);
           card.appendChild(shiftsCol);
           listEl.appendChild(card);
